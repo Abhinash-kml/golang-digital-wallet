@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS ledger(
     entry_id UUID PRIMARY KEY DEFAULT uuidv7(),
     transaction_id UUID NOT NULL,
     account_id UUID NOT NULL,
-    amount_minor BIGINT NOT NULL,
+    amount_minor BIGINT NOT NULL CHECK (amount_minor > 0),
     direction transaction_direction NOT NULL,
 
     FOREIGN KEY(transaction_id) REFERENCES transactions(id)
@@ -41,22 +41,28 @@ RETURNS TRIGGER
 LANGUAGE PLPGSQL
 AS $$
 DECLARE
-    target_traction_id UUID;
+    target_transaction_id UUID;
     net_balance BIGINT;
     line_count BIGINT;
 BEGIN
-    target_traction_id := NEW.transaction_id;
+    target_transaction_id := NEW.transaction_id;
 
-    -- Calculate net balance and line count for this transaction
-    SELECT COALESCE(SUM(amount_minor), 0), COUNT(*)
+    -- Calculate net balance and line count for this transaction.
+    -- Debits subtract from the transaction total and credits add to it.
+    SELECT COALESCE(SUM(
+        CASE direction
+            WHEN 'CREDIT' THEN amount_minor
+            WHEN 'DEBIT' THEN -amount_minor
+        END
+    ), 0), COUNT(*)
     INTO net_balance, line_count
     FROM ledger
-    WHERE transaction_id = target_traction_id;
+    WHERE transaction_id = target_transaction_id;
 
     -- Ensure at least 2 lines and a zero sum
     IF line_count < 2 OR net_balance <> 0 THEN
         RAISE EXCEPTION 'Unbalanced ledger entry %: net balance is % across % lines',
-        target_traction_id, net_balance, line_count
+        target_transaction_id, net_balance, line_count
         USING ERRCODE = 'check_violation';
     END IF;
 

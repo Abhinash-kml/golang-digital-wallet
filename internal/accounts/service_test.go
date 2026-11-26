@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	queries "github.com/abhinash-kml/digital-wallet/gen"
 	"github.com/abhinash-kml/digital-wallet/internal/accounts"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -32,6 +33,28 @@ func TestCreateAccount(t *testing.T) {
 	acc, err := srv.Create(t.Context(), name, "savings")
 	require.NoError(t, err)
 	assert.Equal(t, acc.Name, name)
+	assert.Equal(t, queries.AccountTypeSAVINGS, acc.Type.AccountType)
+}
+
+func TestCreateCurrentAccount(t *testing.T) {
+	t.Cleanup(func() {
+		truncateTable(t)
+	})
+
+	srv := newService(t)
+	acc, err := srv.Create(t.Context(), "neo", "CURRENT")
+	require.NoError(t, err)
+	assert.Equal(t, queries.AccountTypeCURRENT, acc.Type.AccountType)
+}
+
+func TestCreateAccountInvalidInput(t *testing.T) {
+	srv := newService(t)
+
+	_, err := srv.Create(t.Context(), "  ", "savings")
+	assert.ErrorIs(t, err, accounts.ErrInvalidInput)
+
+	_, err = srv.Create(t.Context(), "neo", "checking")
+	assert.ErrorIs(t, err, accounts.ErrInvalidInput)
 }
 
 func TestDeleteAccount(t *testing.T) {
@@ -73,5 +96,42 @@ func TestDeleteAccountNonExistent(t *testing.T) {
 
 	// Assert
 	require.Error(t, err)
+	assert.ErrorIs(t, err, accounts.ErrNotFound)
+}
+
+func TestFreezeAccount(t *testing.T) {
+	t.Cleanup(func() {
+		truncateTable(t)
+	})
+
+	// Prepare
+	srv := newService(t)
+	acc, err := srv.Create(t.Context(), "neo", "savings")
+	require.NoError(t, err)
+	require.Equal(t, acc.Isfrozen, pgtype.Bool{Bool: false, Valid: true})
+
+	// Act
+	accFrozen, err := srv.Freeze(t.Context(), acc.ID)
+	require.NoError(t, err)
+	require.Equal(t, acc.ID, accFrozen.ID)
+
+	// Assert
+	assert.Equal(t, accFrozen.Isfrozen, pgtype.Bool{Bool: true, Valid: true})
+}
+
+func TestFreezeAccountNotExist(t *testing.T) {
+	t.Cleanup(func() {
+		truncateTable(t)
+	})
+
+	// Prepare
+	srv := newService(t)
+	randomID, _ := uuid.NewRandom()
+
+	// Act
+	_, err := srv.Freeze(t.Context(), pgtype.UUID{Bytes: randomID})
+	require.NotNil(t, err)
+
+	// Assert
 	assert.ErrorIs(t, err, accounts.ErrNotFound)
 }

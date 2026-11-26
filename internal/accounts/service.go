@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	queries "github.com/abhinash-kml/digital-wallet/gen"
 	"github.com/jackc/pgerrcode"
@@ -15,7 +16,7 @@ import (
 var (
 	ErrAlreadyExists = errors.New("already exists")
 	ErrInvalidInput  = errors.New("invalid input")
-	ErrNotFound      = errors.New("not founnd")
+	ErrNotFound      = errors.New("not found")
 )
 
 type Service struct {
@@ -29,10 +30,25 @@ func NewService(pgxConn *pgx.Conn) *Service {
 }
 
 func (s *Service) Create(ctx context.Context, name, acctype string) (queries.Account, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return queries.Account{}, ErrInvalidInput
+	}
+
+	var accountType queries.AccountType
+	switch strings.ToUpper(strings.TrimSpace(acctype)) {
+	case "SAVINGS":
+		accountType = queries.AccountTypeSAVINGS
+	case "CURRENT":
+		accountType = queries.AccountTypeCURRENT
+	default:
+		return queries.Account{}, ErrInvalidInput
+	}
+
 	acc, err := s.q.CreateAccount(ctx, queries.CreateAccountParams{
 		Name: name,
 		Type: queries.NullAccountType{
-			AccountType: queries.AccountTypeSAVINGS,
+			AccountType: accountType,
 			Valid:       true,
 		},
 	})
@@ -67,7 +83,7 @@ func (s *Service) Freeze(ctx context.Context, accID pgtype.UUID) (queries.Accoun
 		if errors.Is(err, pgx.ErrNoRows) {
 			return queries.Account{}, ErrNotFound
 		}
-		return queries.Account{}, fmt.Errorf("deleting account: %w", err)
+		return queries.Account{}, fmt.Errorf("freezing account: %w", err)
 	}
 	return acc, nil
 }

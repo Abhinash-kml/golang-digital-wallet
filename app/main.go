@@ -15,34 +15,30 @@ import (
 )
 
 func main() {
-	fmt.Println("Hello World")
-
 	postgresDsn := fmt.Sprintf("postgresql://%s:%s@%s/%s?sslmode=disable", "postgres", "Abx305", "localhost:5432", "digitalwallet")
 	fmt.Println(postgresDsn)
+
 	conn, err := pgx.Connect(context.Background(), postgresDsn)
 	if err != nil {
-		log.Fatalf("Failed to connect to postgress. Error: %s", err)
+		log.Fatalf("Failed to connect to postgres: %v", err)
 	}
 	defer conn.Close(context.Background())
 
 	db := stdlib.OpenDB(*conn.Config())
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		log.Fatalf("failed to create postgres driver: %s", err)
+		log.Fatalf("failed to create postgres driver: %v", err)
 	}
 
-	// Create migrate instance with file source and postgres driver
 	m, err := migrate.NewWithDatabaseInstance("file://db/migrations", "postgres", driver)
 	if err != nil {
-		log.Fatalf("failed to create migrate instance: %s", err)
+		log.Fatalf("failed to create migrate instance: %v", err)
 	}
 
 	err = m.Up()
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatalf("Failed to migrate up. Error: %s", err)
+		log.Fatalf("failed to migrate up: %v", err)
 	}
-
-	_ = conn
 
 	q := queries.New(conn)
 	account, err := q.CreateAccount(context.Background(), queries.CreateAccountParams{
