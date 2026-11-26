@@ -22,16 +22,30 @@ func truncateTable(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func createAccount(t *testing.T, srv *accounts.Service, name, accountType string) queries.Account {
+	t.Helper()
+	acc, err := srv.Create(t.Context(), name, accountType)
+	require.NoError(t, err)
+	return acc
+}
+
+func newUUID(t *testing.T) pgtype.UUID {
+	t.Helper()
+	id, err := uuid.NewRandom()
+	require.NoError(t, err)
+	return pgtype.UUID{Bytes: id, Valid: true}
+}
+
 func TestCreateAccount(t *testing.T) {
-	//t.Parallel()
 	t.Cleanup(func() {
 		truncateTable(t)
 	})
 
+	// Prepare
 	srv := newService(t)
 	name := "neo"
-	acc, err := srv.Create(t.Context(), name, "savings")
-	require.NoError(t, err)
+	acc := createAccount(t, srv, name, "savings")
+
 	assert.Equal(t, acc.Name, name)
 	assert.Equal(t, queries.AccountTypeSAVINGS, acc.Type.AccountType)
 }
@@ -41,13 +55,20 @@ func TestCreateCurrentAccount(t *testing.T) {
 		truncateTable(t)
 	})
 
+	// Prepare
 	srv := newService(t)
-	acc, err := srv.Create(t.Context(), "neo", "CURRENT")
-	require.NoError(t, err)
+	acc := createAccount(t, srv, "neo", "CURRENT")
+
+	// Assert
 	assert.Equal(t, queries.AccountTypeCURRENT, acc.Type.AccountType)
 }
 
 func TestCreateAccountInvalidInput(t *testing.T) {
+	t.Cleanup(func() {
+		truncateTable(t)
+	})
+
+	// Prepare & assert
 	srv := newService(t)
 
 	_, err := srv.Create(t.Context(), "  ", "savings")
@@ -58,7 +79,6 @@ func TestCreateAccountInvalidInput(t *testing.T) {
 }
 
 func TestDeleteAccount(t *testing.T) {
-	//t.Parallel()
 	t.Cleanup(func() {
 		truncateTable(t)
 	})
@@ -68,8 +88,7 @@ func TestDeleteAccount(t *testing.T) {
 	name := "neo"
 
 	// Act
-	acc, err := srv.Create(t.Context(), name, "savings")
-	require.NoError(t, err)
+	acc := createAccount(t, srv, name, "savings")
 
 	// Assert
 	assert.Equal(t, acc.Name, name)
@@ -89,10 +108,10 @@ func TestDeleteAccountNonExistent(t *testing.T) {
 
 	// Prepare
 	srv := newService(t)
-	accID, _ := uuid.NewRandom()
+	accID := newUUID(t)
 
 	// Act
-	_, err := srv.Delete(t.Context(), pgtype.UUID{Bytes: accID})
+	_, err := srv.Delete(t.Context(), accID)
 
 	// Assert
 	require.Error(t, err)
@@ -106,8 +125,7 @@ func TestFreezeAccount(t *testing.T) {
 
 	// Prepare
 	srv := newService(t)
-	acc, err := srv.Create(t.Context(), "neo", "savings")
-	require.NoError(t, err)
+	acc := createAccount(t, srv, "neo", "savings")
 	require.Equal(t, acc.Isfrozen, pgtype.Bool{Bool: false, Valid: true})
 
 	// Act
@@ -126,10 +144,10 @@ func TestFreezeAccountNotExist(t *testing.T) {
 
 	// Prepare
 	srv := newService(t)
-	randomID, _ := uuid.NewRandom()
+	randomID := newUUID(t)
 
 	// Act
-	_, err := srv.Freeze(t.Context(), pgtype.UUID{Bytes: randomID})
+	_, err := srv.Freeze(t.Context(), randomID)
 	require.NotNil(t, err)
 
 	// Assert

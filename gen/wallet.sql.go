@@ -63,3 +63,57 @@ func (q *Queries) DebitFromAccount(ctx context.Context, arg DebitFromAccountPara
 	_, err := q.db.Exec(ctx, debitFromAccount, arg.TransactionID, arg.AccountID, arg.AmountMinor)
 	return err
 }
+
+const getTransactionByIdempotency = `-- name: GetTransactionByIdempotency :one
+SELECT id, idempotency, created_at, completed_at
+FROM transactions
+WHERE idempotency = $1
+`
+
+func (q *Queries) GetTransactionByIdempotency(ctx context.Context, idempotency pgtype.UUID) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionByIdempotency, idempotency)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Idempotency,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const getAccountBalance = `-- name: GetAccountBalance :one
+SELECT COALESCE(SUM(
+    CASE direction
+        WHEN 'CREDIT' THEN amount_minor
+        WHEN 'DEBIT' THEN -amount_minor
+    END
+), 0)::BIGINT AS balance_minor
+FROM ledger
+WHERE account_id = $1
+`
+
+func (q *Queries) GetAccountBalance(ctx context.Context, accountID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, getAccountBalance, accountID)
+	var balanceMinor int64
+	err := row.Scan(&balanceMinor)
+	return balanceMinor, err
+}
+
+const getAccount = `-- name: GetAccount :one
+SELECT id, name, type, isfrozen
+FROM accounts
+WHERE id = $1
+`
+
+func (q *Queries) GetAccount(ctx context.Context, id pgtype.UUID) (Account, error) {
+	row := q.db.QueryRow(ctx, getAccount, id)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.Isfrozen,
+	)
+	return i, err
+}
